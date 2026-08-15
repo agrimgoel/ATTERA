@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #f4f6f9;
+  color: #0b2545;
+}
+
+.card {
+  @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+}
+
+.btn-primary {
+  @apply bg-navy text-white font-semibold rounded-xl py-3 px-5 hover:bg-navy-light transition disabled:opacity-50;
+}
+
+.btn-outline {
+  @apply border border-slate-300 text-navy font-semibold rounded-xl py-3 px-5 hover:bg-slate-50 transition;
+}
+
+.input {
+  @apply w-full border border-slate-300 rounded-xl py-3 px-4 outline-none focus:border-navy focus:ring-1 focus:ring-navy;
+}
+
+.bottom-nav-item {
+  @apply flex flex-col items-center gap-1 text-xs text-slate-500;
+}
+.bottom-nav-item.active {
+  @apply text-navy font-semibold;
+}
