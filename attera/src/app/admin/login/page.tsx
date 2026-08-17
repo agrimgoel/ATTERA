@@ -29,9 +29,9 @@ export default function AdminLogin() {
     }
 
     const role = data.user?.user_metadata?.role;
-    if (role !== "teacher" && role !== "hod") {
+    if (role !== "teacher" && role !== "hod" && role !== "system_checker") {
       await supabase.auth.signOut();
-      setError("This login is not registered as a teacher/HOD account.");
+      setError("This login is not registered as an authorized account.");
       setLoading(false);
       return;
     }

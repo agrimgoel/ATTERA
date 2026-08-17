@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { initials, todayISO } from "@/lib/utils";
+import Papa from "papaparse";
 
 interface StudentAttendance {
   id: string;
@@ -98,6 +99,141 @@ export default function MarkAttendancePage() {
     setStudents((prev) => prev.map((s) => ({ ...s, status: "present" })));
   }
 
+  async function handleCSVUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSaving(true);
+    setSavedMsg("Parsing CSV...");
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setSavedMsg("Error: Not logged in.");
+      setSaving(false);
+      return;
+    }
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const headers = results.meta.fields || [];
+          
+          // Find the roll number column
+          const rollNoHeader = headers.find(h => 
+            h.toLowerCase() === "roll_no" || 
+            h.toLowerCase() === "rollno" || 
+            h.toLowerCase() === "roll number" ||
+            h.toLowerCase() === "roll"
+          );
+
+          if (!rollNoHeader) {
+            throw new Error("CSV must contain a 'roll_no' column.");
+          }
+
+          // Find headers that are valid dates (e.g. 2026-08-01, 08/01/2026)
+          const dateCols: { header: string; dateStr: string }[] = [];
+          for (const header of headers) {
+            if (header === rollNoHeader) continue;
+            // Clean up header and test if it is a valid date
+            const cleaned = header.trim();
+            const d = new Date(cleaned);
+            if (!isNaN(d.getTime())) {
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const day = String(d.getDate()).padStart(2, "0");
+              dateCols.push({ header, dateStr: `${y}-${m}-${day}` });
+            }
+          }
+
+          // If we found date columns, it's a multi-date Excel CSV
+          if (dateCols.length > 0) {
+            setSavedMsg(`Uploading attendance for ${dateCols.length} dates...`);
+            const upsertRows: any[] = [];
+            let matchedStudents = 0;
+
+            for (const row of results.data as any[]) {
+              const rollNoVal = row[rollNoHeader]?.trim();
+              if (!rollNoVal) continue;
+
+              const matchedStudent = students.find((s) => s.roll_no === rollNoVal);
+              if (!matchedStudent) continue;
+              matchedStudents++;
+
+              for (const { header, dateStr } of dateCols) {
+                const statusVal = row[header]?.trim().toLowerCase();
+                if (!statusVal) continue;
+
+                const status = statusVal.includes("present") || statusVal === "p" || statusVal === "1" || statusVal.includes("pres") ? "present" : "absent";
+                upsertRows.push({
+                  assignment_id: assignmentId,
+                  student_id: matchedStudent.id,
+                  class_date: dateStr,
+                  status,
+                  marked_by: user.id,
+                  schedule_id: scheduleId || null,
+                });
+              }
+            }
+
+            if (upsertRows.length === 0) {
+              throw new Error("No matching student roll numbers or attendance records found in the CSV.");
+            }
+
+            // Perform bulk database upsert in chunks of 500
+            const chunkSize = 500;
+            for (let i = 0; i < upsertRows.length; i += chunkSize) {
+              const chunk = upsertRows.slice(i, i + chunkSize);
+              const { error } = await supabase
+                .from("attendance")
+                .upsert(chunk, { onConflict: "assignment_id,student_id,class_date,schedule_id" });
+              if (error) throw error;
+            }
+
+            setSavedMsg(`Successfully uploaded ${upsertRows.length} attendance records across ${matchedStudents} students for ${dateCols.length} dates!`);
+          } else {
+            // Single-date CSV fallback (contains roll_no and status columns)
+            const statusHeader = headers.find(h => h.toLowerCase() === "status" || h.toLowerCase() === "attendance");
+            if (!statusHeader) {
+              throw new Error("CSV must contain date columns (e.g. 2026-08-01) or a 'status' column.");
+            }
+
+            let matched = 0;
+            const rows = results.data as any[];
+
+            setStudents((prev) => {
+              const updated = [...prev];
+              for (const row of rows) {
+                const rNo = row[rollNoHeader]?.trim();
+                const statusStr = row[statusHeader]?.trim().toLowerCase();
+                if (!rNo || !statusStr) continue;
+
+                const normalizedStatus = statusStr.includes("present") || statusStr === "p" || statusStr.includes("pres") ? "present" : "absent";
+                const idx = updated.findIndex((s) => s.roll_no === rNo);
+                if (idx !== -1) {
+                  updated[idx] = { ...updated[idx], status: normalizedStatus };
+                  matched++;
+                }
+              }
+              return updated;
+            });
+
+            setSavedMsg(`Imported single-date attendance for ${matched} students. Click 'Save Attendance' below to store.`);
+          }
+        } catch (err: any) {
+          setSavedMsg(`Error: ${err.message || "Failed to process CSV."}`);
+        } finally {
+          setSaving(false);
+        }
+      },
+      error: (err) => {
+        setSavedMsg(`CSV Parsing Error: ${err.message}`);
+        setSaving(false);
+      }
+    });
+  }
+
   async function saveAttendance() {
     setSaving(true);
     setSavedMsg(null);
@@ -171,12 +307,23 @@ export default function MarkAttendancePage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button
-          onClick={markAllPresent}
-          className="btn-primary mt-2 w-full py-2"
-        >
-          Mark All Present
-        </button>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={markAllPresent}
+            className="btn-primary flex-1 py-2"
+          >
+            Mark All Present
+          </button>
+          <label className="btn-outline flex-1 py-2 text-center cursor-pointer text-xs font-semibold flex items-center justify-center">
+            📤 Upload CSV
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleCSVUpload}
+            />
+          </label>
+        </div>
       </section>
 
       <section className="mt-4 flex flex-col gap-3 px-5">

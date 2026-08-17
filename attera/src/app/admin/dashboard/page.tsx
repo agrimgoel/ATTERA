@@ -22,6 +22,11 @@ export default async function AdminDashboard() {
     redirect("/admin/hod");
   }
 
+  if (teacher?.role === "system_checker") {
+    const { redirect } = await import("next/navigation");
+    redirect("/admin/system-checker");
+  }
+
   const today = new Date();
   const dow = today.getDay();
   const todayLabel = today.toLocaleDateString("en-US", {
@@ -81,6 +86,21 @@ export default async function AdminDashboard() {
           <div className="mt-2 font-semibold text-navy">View Schedule</div>
           <div className="text-xs text-slate-500">
             {myClasses.length} classes today
+          </div>
+        </Link>
+      </section>
+
+      <section className="mt-3 px-5">
+        <Link
+          href="/admin/marks"
+          className="card flex items-center gap-3 p-4 border border-teal/20 bg-teal/5 hover:bg-teal/10 hover:border-teal transition-all"
+        >
+          <div className="text-lg">📝</div>
+          <div>
+            <div className="font-semibold text-navy">Enter Marks</div>
+            <div className="text-xs text-slate-500">
+              Submit grades for ST1, ST2, and PUT
+            </div>
           </div>
         </Link>
       </section>

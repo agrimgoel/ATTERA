@@ -10,6 +10,11 @@ export default async function HodPage() {
     .select("*")
     .order("percentage", { ascending: true });
 
+  const { data: classes } = await supabase
+    .from("classes")
+    .select("id, name")
+    .order("name");
+
   const rows = overall ?? [];
   const low = rows.filter((r) => (r.percentage ?? 0) < 75);
   const rest = rows.filter((r) => (r.percentage ?? 0) >= 75);
@@ -23,10 +28,32 @@ export default async function HodPage() {
         </Link>
       </header>
 
-      <section className="mt-2 px-5">
+      <section className="mt-2 grid grid-cols-2 gap-3 px-5">
         <div className="card p-4">
           <div className="text-xs text-slate-500">Total Students</div>
           <div className="text-2xl font-bold text-navy">{rows.length}</div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs text-slate-500">Total Classes</div>
+          <div className="text-2xl font-bold text-teal">{(classes ?? []).length}</div>
+        </div>
+      </section>
+
+      <section className="mt-5 px-5">
+        <h2 className="text-sm font-bold uppercase text-slate-400 mb-2">
+          Sections / Classes
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          {(classes ?? []).map((cls) => (
+            <Link
+              key={cls.id}
+              href={`/admin/hod/sections/${cls.id}`}
+              className="card p-4 text-center border border-slate-200 hover:border-navy transition-all"
+            >
+              <div className="font-bold text-navy">{cls.name}</div>
+              <div className="text-xs text-slate-500 mt-1">View Teachers & Marks</div>
+            </Link>
+          ))}
         </div>
       </section>
 

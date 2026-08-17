@@ -25,7 +25,7 @@ create table if not exists public.teachers (
   name text not null,
   email text not null unique,
   dob date not null,                 -- stored for admin re-issue only; NOT used to log in (auth password is)
-  role text not null default 'teacher' check (role in ('teacher','hod')),
+  role text not null default 'teacher' check (role in ('teacher','hod','system_checker')),
   created_at timestamptz not null default now()
 );
 
@@ -236,3 +236,68 @@ group by s.id, s.name, s.roll_no, s.class_id;
 -- views, explicitly run:
 -- alter view public.attendance_summary set (security_invoker = true);
 -- alter view public.attendance_overall set (security_invoker = true);
+
+-- =====================================================================
+-- System Checker Helper and RLS policies
+-- =====================================================================
+create or replace function public.is_system_checker()
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select exists (
+    select 1 from public.teachers t where t.id = auth.uid() and t.role = 'system_checker'
+  );
+$$;
+
+create policy "system_checker manages assignments" on public.assignments
+  for all using (public.is_system_checker()) with check (public.is_system_checker());
+
+create policy "system_checker manages schedules" on public.schedules
+  for all using (public.is_system_checker()) with check (public.is_system_checker());
+
+-- =====================================================================
+-- Marks Table and RLS Policies
+-- =====================================================================
+create table if not exists public.marks (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students(id) on delete cascade,
+  subject_id uuid not null references public.subjects(id) on delete cascade,
+  test_type text not null check (test_type in ('ST1', 'ST2', 'PUT')),
+  test_name text,
+  total_marks numeric not null,
+  given_marks numeric not null,
+  marked_by uuid not null references public.teachers(id),
+  created_at timestamptz not null default now(),
+  unique (student_id, subject_id, test_type)
+);
+
+alter table public.marks enable row level security;
+
+create policy "marks select policy" on public.marks
+  for select using (
+    student_id = auth.uid()
+    or public.is_hod()
+    or exists (
+      select 1 from public.assignments a
+      where a.subject_id = marks.subject_id and a.teacher_id = auth.uid()
+    )
+  );
+
+create policy "marks insert policy" on public.marks
+  for insert with check (
+    exists (
+      select 1 from public.assignments a
+      where a.subject_id = subject_id and a.teacher_id = auth.uid()
+    )
+  );
+
+create policy "marks update policy" on public.marks
+  for update using (
+    exists (
+      select 1 from public.assignments a
+      where a.subject_id = subject_id and a.teacher_id = auth.uid()
+    )
+  );
+

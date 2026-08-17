@@ -1,10 +1,22 @@
-export type Role = "teacher" | "hod" | "student";
+export type Role = "teacher" | "hod" | "student" | "system_checker";
 
 export interface Teacher {
   id: string;
   name: string;
   email: string;
   role: Role;
+}
+
+export interface MarksRow {
+  id: string;
+  student_id: string;
+  subject_id: string;
+  test_type: "ST1" | "ST2" | "PUT";
+  test_name: string | null;
+  total_marks: number;
+  given_marks: number;
+  marked_by: string;
+  created_at: string;
 }
 
 export interface StudentRow {

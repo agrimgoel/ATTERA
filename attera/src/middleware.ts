@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
     url.pathname = "/student/dashboard";
     return NextResponse.redirect(url);
   }
-  if (isStudentArea && (role === "teacher" || role === "hod")) {
+  if (isStudentArea && (role === "teacher" || role === "hod" || role === "system_checker")) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/dashboard";
     return NextResponse.redirect(url);
